@@ -288,17 +288,42 @@ def main():
     # File upload for batch
     st.subheader("📂 Batch Process Activities from Excel")
     uploaded = st.file_uploader("Upload Excel with a column named 'Activity Name'", type=["xlsx"])
+
+    # Detect new file upload and clear previous session data
+    if uploaded:
+        if (
+            "last_file" not in st.session_state
+            or st.session_state.last_file != uploaded.name
+        ):
+            st.session_state.last_file = uploaded.name
+            st.session_state.output_file = None
+            st.session_state.input_file = None
+            st.info("📁 New file detected — previous data cleared.")
+
+    # Process the uploaded file
     if uploaded and st.button("Process File"):
-        input_file = "uploaded_activities.xlsx"
+        input_file = f"uploaded_{uploaded.name}"
         with open(input_file, "wb") as f:
             f.write(uploaded.read())
 
-        output_file = "isic_mapped_sheet.xlsx"
-        process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True)
+        output_file = f"processed_{uploaded.name.replace('.xlsx', '')}_result.xlsx"
+
+        st.session_state.input_file = input_file
+        st.session_state.output_file = output_file
+
+        process_activities_with_rag(
+            input_file, output_file, dataframes, vectorstores, use_llm=True
+        )
 
         st.success("✅ Processing complete. Download your results below:")
-        st.download_button("Download Results", data=open(output_file, "rb").read(), file_name="isic_mapped_sheet.xlsx")
 
-
+    # Show download button only when latest file is ready
+    if st.session_state.get("output_file"):
+        with open(st.session_state.output_file, "rb") as f:
+            st.download_button(
+                "⬇️ Download Results",
+                data=f,
+                file_name="isic_mapped_sheet.xlsx",
+            )
 if __name__ == "__main__":
     main()
