@@ -286,7 +286,11 @@ def main():
                 st.write("**Reason:**", res.get("reason"))
 
     # File upload for batch
+    import os
+
+    # File upload for batch
     st.subheader("📂 Batch Process Activities from Excel")
+
     uploaded = st.file_uploader("Upload Excel with a column named 'Activity Name'", type=["xlsx"])
 
     # Detect new file upload and clear previous session data
@@ -308,6 +312,10 @@ def main():
 
         output_file = f"processed_{uploaded.name.replace('.xlsx', '')}_result.xlsx"
 
+        # ✅ Ensure fresh output file each time
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
         st.session_state.input_file = input_file
         st.session_state.output_file = output_file
 
@@ -318,12 +326,13 @@ def main():
         st.success("✅ Processing complete. Download your results below:")
 
     # Show download button only when latest file is ready
-    if st.session_state.get("output_file"):
+    if st.session_state.get("output_file") and os.path.exists(st.session_state.output_file):
         with open(st.session_state.output_file, "rb") as f:
             st.download_button(
                 "⬇️ Download Results",
                 data=f,
                 file_name="isic_mapped_sheet.xlsx",
             )
+
 if __name__ == "__main__":
     main()
