@@ -1,0 +1,9 @@
+streamlit
+pandas
+openpyxl
+langchain
+langchain-community
+langchain-openai
+faiss-cpu
+python-dotenv
+rapidfuzz
