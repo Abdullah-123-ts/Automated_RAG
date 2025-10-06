@@ -7,6 +7,7 @@ from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
 from langchain.docstore.document import Document
 from openpyxl import load_workbook
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------- NORMALIZE ----------------
 def normalize_text(text: str) -> str:
@@ -180,58 +181,78 @@ def search_activity(query: str, dataframes: dict, vectorstores: dict, use_llm: b
     return {"source": None, "activity": None, "class": None, "method": "No match", "llm_raw": response.content}
 
 
-def search_multiple_activities(queries, dataframes, vectorstores, use_llm=False):
+def search_multiple_activities(queries, dataframes, vectorstores, use_llm=True, progress_callback=None):
     results = []
-    for q in queries:
-        q = q.strip()
-        if not q:
-            continue
-        result = search_activity(q, dataframes, vectorstores, use_llm=use_llm)
-        results.append(result)
+
+    # Run LLM searches in parallel for faster batch processing
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_query = {
+            executor.submit(search_activity, q.strip(), dataframes, vectorstores, use_llm): q
+            for q in queries if q.strip()
+        }
+
+        for i, future in enumerate(as_completed(future_to_query)):
+            query = future_to_query[future]
+            try:
+                result = future.result()
+            except Exception as e:
+                result = {"query": query, "error": str(e)}
+            results.append(result)
+
+            # Update Streamlit progress
+            if progress_callback:
+                progress_callback(i + 1, len(queries))
+
     return results
 
 
-def process_activities_with_rag(input_file: str, output_file: str, dataframes: dict, vectorstores: dict, use_llm: bool = True, batch_size: int = 10):
+def process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True, batch_size=10):
     df_in = pd.read_excel(input_file)
-    if "activities" not in df_in.columns:
-        raise ValueError("Input file must contain a column named 'activities'")
+    if "Activity Name" not in df_in.columns:
+        raise ValueError("Input file must contain a column named 'Activity Name'")
 
-    activities = df_in["activities"].dropna().tolist()
+    activities = df_in["Activity Name"].dropna().tolist()
+
+    st.write(f"🔍 Found {len(activities)} activities to process.")
+    progress_text = st.empty()
+    progress_bar = st.progress(0)
 
     for i in range(0, len(activities), batch_size):
-        batch = activities[i:i+batch_size]
-        rag_results = search_multiple_activities(batch, dataframes, vectorstores, use_llm=use_llm)
+        batch = activities[i:i + batch_size]
 
-        batch_results = []
-        for res in rag_results:
-            batch_results.append({
-                "Entered Activity": res.get("query"),
-                "Matched Activity": res.get("activity"),
-                "Division": res.get("division"),
-                "Group": res.get("group"),
-                "Class (Code)": res.get("class"),
-                "ISIC Description": res.get("isic_description"),
-                "Method": res.get("method"),
-                "Score": res.get("score"),
-                "Reason": res.get("reason"),
-            })
+        def update_progress(done, total):
+            percent = int(((i + done) / len(activities)) * 100)
+            progress_bar.progress(percent)
+            progress_text.text(f"Processing batch {i//batch_size + 1}: {i + done}/{len(activities)} done...")
+
+        rag_results = search_multiple_activities(batch, dataframes, vectorstores, use_llm=use_llm, progress_callback=update_progress)
+
+        batch_results = [{
+            "Activity Name": res.get("query"),
+            "Division": res.get("division"),
+            "Group": res.get("group"),
+            "Class": res.get("class"),
+            "ISIC Description": res.get("isic_description"),
+        } for res in rag_results]
 
         df_batch = pd.DataFrame(batch_results)
 
-        # Append instead of overwriting
+        # Append efficiently (without reloading the whole file)
         if not os.path.exists(output_file):
             df_batch.to_excel(output_file, index=False)
         else:
+            book = load_workbook(output_file)
+            sheet = book.active
+            startrow = sheet.max_row
             with pd.ExcelWriter(output_file, mode="a", engine="openpyxl", if_sheet_exists="overlay") as writer:
-                # Load existing sheet and find next empty row
-                book = load_workbook(output_file)
-                sheet = book.active
-                startrow = sheet.max_row
                 df_batch.to_excel(writer, index=False, header=False, startrow=startrow)
 
-        print(f"✅ Appended batch {i//batch_size + 1} ({min(i + batch_size, len(activities))}/{len(activities)})")
+        st.success(f"✅ Finished batch {i//batch_size + 1} ({min(i + batch_size, len(activities))}/{len(activities)})")
 
-    print(f"📄 Results appended to {output_file}")
+    progress_bar.progress(100)
+    progress_text.text("✅ All batches completed!")
+
+    st.write(f"📄 Results appended to `{output_file}`")
 
 # ---------------- STREAMLIT APP ----------------
 def main():
@@ -266,17 +287,17 @@ def main():
 
     # File upload for batch
     st.subheader("📂 Batch Process Activities from Excel")
-    uploaded = st.file_uploader("Upload Excel with a column named 'activities'", type=["xlsx"])
+    uploaded = st.file_uploader("Upload Excel with a column named 'Activity Name'", type=["xlsx"])
     if uploaded and st.button("Process File"):
         input_file = "uploaded_activities.xlsx"
         with open(input_file, "wb") as f:
             f.write(uploaded.read())
 
-        output_file = "classified_activities.xlsx"
+        output_file = "isic_mapped_sheet.xlsx"
         process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True)
 
         st.success("✅ Processing complete. Download your results below:")
-        st.download_button("Download Results", data=open(output_file, "rb").read(), file_name="classified_activities.xlsx")
+        st.download_button("Download Results", data=open(output_file, "rb").read(), file_name="isic_mapped_sheet.xlsx")
 
 
 if __name__ == "__main__":
