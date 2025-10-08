@@ -209,7 +209,8 @@ def search_multiple_activities(queries, dataframes, vectorstores, use_llm=True, 
 def process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True, batch_size=10):
     df_in = pd.read_excel(input_file)
     if "Activity Name" not in df_in.columns:
-        raise ValueError("Input file must contain a column named 'Activity Name'")
+        st.error("❌ The uploaded Excel file must contain a column named **'Activity Name'**.")
+        st.stop()
 
     activities = df_in["Activity Name"].dropna().tolist()
 
