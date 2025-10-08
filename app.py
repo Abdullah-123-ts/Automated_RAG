@@ -333,9 +333,9 @@ def main():
                 data=f,
                 file_name="isic_mapped_sheet.xlsx",
             )
-    if st.button("🧹 Clear Cached Vectorstores"):
-        st.cache_resource.clear()
-        st.cache_data.clear()
-        st.success("✅ Cache cleared — the app will rebuild vector DBs on next run.")
+    # if st.button("🧹 Clear Cached Vectorstores"):
+    #     st.cache_resource.clear()
+    #     st.cache_data.clear()
+    #     st.success("✅ Cache cleared — the app will rebuild vector DBs on next run.")
 if __name__ == "__main__":
     main()
