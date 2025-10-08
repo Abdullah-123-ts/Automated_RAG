@@ -10,17 +10,19 @@ from openpyxl import load_workbook
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ---------------- NORMALIZE ----------------
+# ---------------- FIXED NORMALIZATION ----------------
 def normalize_text(text: str) -> str:
     if not isinstance(text, str):
         return ""
     text = text.lower().strip()
+    text = text.replace("&amp;", "and")  # ✅ fix HTML encoded ampersands
     text = re.sub(r"&", "and", text)
     text = re.sub(r"\s+", " ", text)
     return text
 
 
-# ---------------- FUZZY MATCH ----------------
-def fuzzy_exact_match(query: str, df: pd.DataFrame, threshold: int = 95):
+# ---------------- FIXED FUZZY MATCH ----------------
+def fuzzy_exact_match(query: str, df: pd.DataFrame, threshold: int = 90):  # ✅ lowered threshold
     best_row = None
     best_score = 0
     qn = normalize_text(query)
@@ -41,7 +43,6 @@ def fuzzy_exact_match(query: str, df: pd.DataFrame, threshold: int = 95):
             "score": int(best_score),
         }
     return None
-
 
 # ---------------- JSON PARSING ----------------
 def parse_json_like(text: str):
@@ -182,30 +183,29 @@ def search_activity(query: str, dataframes: dict, vectorstores: dict, use_llm: b
 
 
 def search_multiple_activities(queries, dataframes, vectorstores, use_llm=True, progress_callback=None):
-    results = []
+    results = [None] * len(queries)
 
-    # Run LLM searches in parallel for faster batch processing
     with ThreadPoolExecutor(max_workers=5) as executor:
-        future_to_query = {
-            executor.submit(search_activity, q.strip(), dataframes, vectorstores, use_llm): q
-            for q in queries if q.strip()
+        future_to_index = {
+            executor.submit(search_activity, q.strip(), dataframes, vectorstores, use_llm): i
+            for i, q in enumerate(queries) if q.strip()
         }
 
-        for i, future in enumerate(as_completed(future_to_query)):
-            query = future_to_query[future]
+        for done, future in enumerate(as_completed(future_to_index)):
+            idx = future_to_index[future]
+            query = queries[idx]
             try:
-                result = future.result()
+                results[idx] = future.result()
             except Exception as e:
-                result = {"query": query, "error": str(e)}
-            results.append(result)
+                results[idx] = {"query": query, "error": str(e)}
 
-            # Update Streamlit progress
             if progress_callback:
-                progress_callback(i + 1, len(queries))
+                progress_callback(done + 1, len(queries))
 
     return results
 
 
+# ---------------- FIXED BATCH PROCESSOR ----------------
 def process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True, batch_size=10):
     df_in = pd.read_excel(input_file)
     if "Activity Name" not in df_in.columns:
@@ -218,6 +218,8 @@ def process_activities_with_rag(input_file, output_file, dataframes, vectorstore
     progress_text = st.empty()
     progress_bar = st.progress(0)
 
+    all_results = []
+
     for i in range(0, len(activities), batch_size):
         batch = activities[i:i + batch_size]
 
@@ -226,35 +228,31 @@ def process_activities_with_rag(input_file, output_file, dataframes, vectorstore
             progress_bar.progress(percent)
             progress_text.text(f"Processing batch {i//batch_size + 1}: {i + done}/{len(activities)} done...")
 
-        rag_results = search_multiple_activities(batch, dataframes, vectorstores, use_llm=use_llm, progress_callback=update_progress)
+        rag_results = search_multiple_activities(
+            batch, dataframes, vectorstores, use_llm=use_llm, progress_callback=update_progress
+        )
 
-        batch_results = [{
-            "Activity Name": res.get("query"),
-            "Division": res.get("division"),
-            "Group": res.get("group"),
-            "Class": res.get("class"),
-            "ISIC Description": res.get("isic_description"),
-        } for res in rag_results]
+        # ✅ Preserve original query order
+        ordered_results = sorted(rag_results, key=lambda x: batch.index(x["query"]))
 
-        df_batch = pd.DataFrame(batch_results)
-
-        # Append efficiently (without reloading the whole file)
-        if not os.path.exists(output_file):
-            df_batch.to_excel(output_file, index=False)
-        else:
-            book = load_workbook(output_file)
-            sheet = book.active
-            startrow = sheet.max_row
-            with pd.ExcelWriter(output_file, mode="a", engine="openpyxl", if_sheet_exists="overlay") as writer:
-                df_batch.to_excel(writer, index=False, header=False, startrow=startrow)
+        all_results.extend(ordered_results)
 
         st.success(f"✅ Finished batch {i//batch_size + 1} ({min(i + batch_size, len(activities))}/{len(activities)})")
 
+    # ✅ Write final combined results in correct order
+    final_df = pd.DataFrame([{
+        "Activity Name": res.get("query"),
+        "Division": res.get("division"),
+        "Group": res.get("group"),
+        "Class": res.get("class"),
+        "ISIC Description": res.get("isic_description"),
+    } for res in all_results])
+
+    final_df.to_excel(output_file, index=False)
+
     progress_bar.progress(100)
     progress_text.text("✅ All batches completed!")
-
-    st.write(f"📄 Results appended to `{output_file}`")
-
+    st.write(f"📄 Results saved to `{output_file}`")
 # ---------------- STREAMLIT APP ----------------
 def main():
     st.title("Activity Code Finder (RAG)")
