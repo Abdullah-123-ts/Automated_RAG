@@ -89,7 +89,7 @@ def load_sheets():
 
 # ---------------- VECTOR STORE ----------------
 @st.cache_resource
-def load_or_create_vectorstore(sheet_name: str, df: pd.DataFrame):
+def load_or_create_vectorstore(sheet_name: str, df: pd.DataFrame, version: int = 2):
     store_path = os.path.join(VECTOR_STORE_DIR, f"{sheet_name}_faiss")
     embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
