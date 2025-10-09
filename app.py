@@ -237,7 +237,7 @@ def process_activities_with_rag(input_file, output_file, dataframes, vectorstore
 
         all_results.extend(ordered_results)
 
-        st.success(f"✅ Finished batch {i//batch_size + 1} ({min(i + batch_size, len(activities))}/{len(activities)})")
+        # st.success(f"✅ Finished batch {i//batch_size + 1} ({min(i + batch_size, len(activities))}/{len(activities)})")
 
     # ✅ Write final combined results in correct order
     final_df = pd.DataFrame([{
