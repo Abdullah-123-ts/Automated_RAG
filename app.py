@@ -232,8 +232,19 @@ def process_activities_with_rag(input_file, output_file, dataframes, vectorstore
             batch, dataframes, vectorstores, use_llm=use_llm, progress_callback=update_progress
         )
 
+        clean_batch = [b.replace('\xa0', ' ').strip() for b in batch]
+
+        for r in rag_results:
+            r["query"] = r["query"].replace('\xa0', ' ').strip()
+
+
         # ✅ Preserve original query order
-        ordered_results = sorted(rag_results, key=lambda x: batch.index(x["query"]))
+        # ordered_results = sorted(rag_results, key=lambda x: batch.index(x["query"]))
+
+        ordered_results = sorted(
+            rag_results,
+            key=lambda x: clean_batch.index(x["query"]) if x["query"] in clean_batch else len(clean_batch)
+        )
 
         all_results.extend(ordered_results)
 
