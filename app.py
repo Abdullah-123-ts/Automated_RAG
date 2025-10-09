@@ -79,7 +79,7 @@ SHEETS_ORDER = ["consolidated_sheet.xlsx"]
 def load_sheets():
     dataframes = {}
     for sheet in SHEETS_ORDER:
-        df = pd.read_excel(sheet)
+        df = pd.read_excel(sheet, dtype=str)
         df.columns = [c.strip().lower() for c in df.columns]
         required_cols = {"activity name", "class", "division", "group", "isic description"}
         if not required_cols.issubset(set(df.columns)):
@@ -207,7 +207,7 @@ def search_multiple_activities(queries, dataframes, vectorstores, use_llm=True, 
 
 # ---------------- FIXED BATCH PROCESSOR ----------------
 def process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True, batch_size=10):
-    df_in = pd.read_excel(input_file)
+    df_in = pd.read_excel(input_file, dtype=str)
     if "Activity Name" not in df_in.columns:
         st.error("❌ The uploaded Excel file must contain a column named **'Activity Name'**.")
         st.stop()
