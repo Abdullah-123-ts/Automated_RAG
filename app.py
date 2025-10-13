@@ -269,6 +269,16 @@ def main():
     st.title("Activity Code Finder (RAG)")
     st.write("Search activity codes from consolidated sheets. Supports multiple activities or batch uploads.")
 
+    # ✅ Restore previous processed file if session is reloaded
+    if "output_file" in st.session_state and st.session_state.output_file and os.path.exists(st.session_state.output_file):
+        st.success("✅ Previously processed file found. You can download it below.")
+        with open(st.session_state.output_file, "rb") as f:
+            st.download_button(
+                "⬇️ Download Results (Previous Session)",
+                data=f,
+                file_name="isic_mapped_sheet.xlsx",
+            )
+
     try:
         dataframes = load_sheets()
     except Exception as e:
@@ -283,7 +293,6 @@ def main():
         queries = [q.strip() for q in re.split(r"[\n]", query) if q.strip()]
         results = search_multiple_activities(queries, dataframes, vectorstores, use_llm=True)
         for res in results:
-            print(f"Result: {res.get('activity')}, Code: {res.get('class')}, Division: {res.get('division')}, Group: {res.get('group')}, ISIC Desc: {res.get('isic_description')}")
             st.subheader(res.get("activity") or "No match")
             st.write("**Query:**", res.get("query"))
             st.write("**Division:**", res.get("division"))
@@ -296,11 +305,7 @@ def main():
                 st.write("**Reason:**", res.get("reason"))
 
     # File upload for batch
-    import os
-
-    # File upload for batch
     st.subheader("📂 Batch Process Activities from Excel")
-
     uploaded = st.file_uploader("Upload Excel with a column named 'Activity Name'", type=["xlsx"])
 
     # Detect new file upload and clear previous session data
@@ -335,7 +340,7 @@ def main():
 
         st.success("✅ Processing complete. Download your results below:")
 
-    # Show download button only when latest file is ready
+    # Show download button if processed file exists (latest or restored from session)
     if st.session_state.get("output_file") and os.path.exists(st.session_state.output_file):
         with open(st.session_state.output_file, "rb") as f:
             st.download_button(
@@ -343,9 +348,6 @@ def main():
                 data=f,
                 file_name="isic_mapped_sheet.xlsx",
             )
-    # if st.button("🧹 Clear Cached Vectorstores"):
-    #     st.cache_resource.clear()
-    #     st.cache_data.clear()
-    #     st.success("✅ Cache cleared — the app will rebuild vector DBs on next run.")
+
 if __name__ == "__main__":
     main()
