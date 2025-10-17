@@ -286,6 +286,51 @@ def main():
         return
 
     vectorstores = {sheet: load_or_create_vectorstore(sheet, df) for sheet, df in dataframes.items()}
+   
+    # ---------------- UPDATE CONSOLIDATED SHEET ----------------
+    st.sidebar.subheader("📁 Update Consolidated Sheet")
+
+    new_sheet = st.sidebar.file_uploader("Upload new consolidated sheet (.xlsx)", type=["xlsx"])
+
+    if new_sheet and st.sidebar.button("🔄 Replace and Rebuild"):
+        try:
+            # Remove old sheet
+            old_path = "consolidated_sheet.xlsx"
+            if os.path.exists(old_path):
+                os.remove(old_path)
+
+            # Save new uploaded sheet
+            with open(old_path, "wb") as f:
+                f.write(new_sheet.read())
+
+            # Clear Streamlit cache
+            st.cache_data.clear()
+            st.cache_resource.clear()
+
+            st.sidebar.success("✅ Sheet replaced and cache cleared.")
+            st.sidebar.info("Rebuilding vector stores... please wait ⏳")
+
+            # Progress elements
+            progress_bar = st.sidebar.progress(0)
+            progress_text = st.sidebar.empty()
+
+            # Reload sheets and rebuild vectorstores
+            dataframes = load_sheets()
+            total = len(dataframes)
+            vectorstores = {}
+
+            for i, (sheet, df) in enumerate(dataframes.items(), 1):
+                vectorstores[sheet] = load_or_create_vectorstore(sheet, df)
+                percent = int((i / total) * 100)
+                progress_bar.progress(percent)
+                progress_text.text(f"Building vector store {i}/{total}...")
+
+            progress_bar.progress(100)
+            progress_text.text("✅ Rebuild complete!")
+            st.sidebar.success("✅ Vector stores rebuilt successfully!")
+
+        except Exception as e:
+            st.sidebar.error(f"❌ Failed to rebuild: {e}")
 
     # Text search
     query = st.text_area("Enter one or multiple activities (each on a newline):")
