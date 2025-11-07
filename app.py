@@ -208,11 +208,11 @@ def search_multiple_activities(queries, dataframes, vectorstores, use_llm=True, 
 # ---------------- FIXED BATCH PROCESSOR ----------------
 def process_activities_with_rag(input_file, output_file, dataframes, vectorstores, use_llm=True, batch_size=10):
     df_in = pd.read_excel(input_file, dtype=str)
-    if "Activity Name" not in df_in.columns:
+    if "activity name" not in df_in.columns:
         st.error("❌ The uploaded Excel file must contain a column named **'Activity Name'**.")
         st.stop()
 
-    activities = df_in["Activity Name"].dropna().tolist()
+    activities = df_in["activity name"].dropna().tolist()
 
     st.write(f"🔍 Found {len(activities)} activities to process.")
     progress_text = st.empty()
