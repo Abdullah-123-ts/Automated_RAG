@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from fuzzywuzzy import fuzz
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_community.vectorstores import FAISS
-from langchain.docstore.document import Document
+from langchain.schema import Document
 from openpyxl import load_workbook
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
